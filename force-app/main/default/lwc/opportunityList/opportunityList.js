@@ -2,9 +2,10 @@ import { LightningElement,wire,track } from 'lwc';
 import {ShowToastEvent} from 'lightning/platformShowToastEvent'
 import {NavigationMixin} from 'lightning/navigation';
 import getOpportunities from '@salesforce/apex/OpportunityListController.getOpportunities';
-import {updateRecord} from 'lightning/uiRecordApi';
+import {updateRecord,deleteRecord} from 'lightning/uiRecordApi';
 import {refreshApex} from '@salesforce/apex'
 import StageName from '@salesforce/schema/Opportunity.StageName';
+import LightningConfirm from 'lightning/confirm'
 
 export default class OpportunityList extends NavigationMixin(LightningElement) {
     @wire(getOpportunities) opportunityList;
@@ -26,18 +27,13 @@ export default class OpportunityList extends NavigationMixin(LightningElement) {
     getRowActions(row,doneCallBack){
         const actions = [
             {label:'View',name:'view'},
-            {label:'Edit Stage',name:'editStage'}
+            {label:'Edit Stage',name:'editStage'},
+            {label:'Delete Record',name:'deleteRecord'}
 
         ];
         doneCallBack(actions);
     }
-   /* handleView(event){
-        event.preventDefault();   // 👈 stop the default button behavior
-        event.stopPropagation();  // 👈 stop event bubbling just in case
-        const oppId= event.target.dataset.id;
-        const opp=this.opportunityList.find(o => o.Id ===oppId);
-        console.log(opp.Id + ' ' + opp.Name);
-    }*/
+
     handleRowAction(event){
         const record= event.detail.row;
         const actionName = event.detail.action.name;
@@ -65,8 +61,45 @@ export default class OpportunityList extends NavigationMixin(LightningElement) {
             this.isModalOpen = true;
 
         }
+        if(actionName==='deleteRecord'){
+            this.selectedRecord =record;
+            this.confirmAndDelete(record.Id,record.Name);
+           
+        }
 
+    }
+    async confirmAndDelete(recordId,recordName){
+        const confirmed =await LightningConfirm.open({
+            message:`Are you sure you want to delete ${recordName}?`,
+            label:'Confirm Deletion',
+            theme:'error'
+        });
 
+        if(confirmed){
+            deleteRecord(recordId)
+            .then(() => {
+                this.dispatchEvent(
+                    new ShowToastEvent({
+                        title:'Delete',
+                        message: `${recordName} deleted successfully`,
+                        variant:'success'
+                    })
+                );
+                 return refreshApex(this.opportunityList);
+            })
+            .catch(error =>{
+                this.dispatchEvent(
+                    new ShowToastEvent({
+                        title:'Error deleting record',
+                        message: error.body.message,
+                        variant:'error'
+                    })
+                );
+      
+            });
+        }else{
+            console.log('User canceled deletion');
+        }
 
     }
     handleStageChange(event){
@@ -116,6 +149,12 @@ export default class OpportunityList extends NavigationMixin(LightningElement) {
             }
 
             );
+    }
+    handleDelete(){
+        if(this.selectedRecord){
+            this.confirmAndDelete(this.selectedRecord.Id,this.selectedRecord.Name);
+        }
+
     }
 
 
